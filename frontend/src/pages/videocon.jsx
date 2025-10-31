@@ -54,6 +54,14 @@ export default function Videocon() {
 
   let [videos, setVideos] = useState([]);
 
+  // Drag and resize states
+  const [localVideoPos, setLocalVideoPos] = useState({ x: 20, y: 100 });
+  const [localVideoSize, setLocalVideoSize] = useState({ width: 200, height: 150 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const dragRef = useRef(null);
+
   useEffect(() => {
     getPermissions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -462,6 +470,63 @@ export default function Videocon() {
     setScreen(!screen);
   };
 
+  // Drag handlers for local video
+  const handleMouseDown = (e) => {
+    if (e.target.classList.contains(styles.resizeHandle)) {
+      setIsResizing(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+    } else {
+      setIsDragging(true);
+      setDragStart({
+        x: e.clientX - localVideoPos.x,
+        y: e.clientY - localVideoPos.y
+      });
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (isDragging) {
+      const newX = e.clientX - dragStart.x;
+      const newY = e.clientY - dragStart.y;
+      
+      // Constrain to viewport
+      const maxX = window.innerWidth - localVideoSize.width;
+      const maxY = window.innerHeight - localVideoSize.height - 100; // 100px for controls
+      
+      setLocalVideoPos({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY))
+      });
+    } else if (isResizing) {
+      const deltaX = e.clientX - dragStart.x;
+      const deltaY = e.clientY - dragStart.y;
+      
+      const newWidth = Math.max(120, Math.min(400, localVideoSize.width + deltaX));
+      const newHeight = Math.max(90, Math.min(300, localVideoSize.height + deltaY));
+      
+      setLocalVideoSize({ width: newWidth, height: newHeight });
+      setDragStart({ x: e.clientX, y: e.clientY });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    setIsResizing(false);
+  };
+
+  useEffect(() => {
+    if (isDragging || isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDragging, isResizing]);
+
   let handleEndCall = () => {
     try {
       let tracks = localVideoref.current.srcObject.getTracks();
@@ -632,12 +697,58 @@ export default function Videocon() {
             </Badge>
           </div>
 
-          <video
+          <div
+            ref={dragRef}
             className={styles.meetUserVideo}
-            ref={localVideoref}
-            autoPlay
-            muted
-          ></video>
+            onMouseDown={handleMouseDown}
+            style={{
+              left: `${localVideoPos.x}px`,
+              bottom: `${localVideoPos.y}px`,
+              width: `${localVideoSize.width}px`,
+              height: `${localVideoSize.height}px`,
+              cursor: isDragging ? 'grabbing' : 'grab',
+              position: 'absolute'
+            }}
+          >
+            <video
+              ref={localVideoref}
+              autoPlay
+              muted
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                borderRadius: '16px',
+                pointerEvents: 'none'
+              }}
+            ></video>
+            <div 
+              className={styles.resizeHandle}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                setIsResizing(true);
+                setDragStart({ x: e.clientX, y: e.clientY });
+              }}
+              style={{
+                position: 'absolute',
+                bottom: '0',
+                right: '0',
+                width: '20px',
+                height: '20px',
+                cursor: 'nwse-resize',
+                background: 'rgba(22, 160, 133, 0.6)',
+                borderRadius: '0 0 16px 0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '12px',
+                color: 'white',
+                userSelect: 'none'
+              }}
+            >
+              ⤡
+            </div>
+          </div>
 
           <div className={styles.conferenceView}>
             {videos.map((video) => (

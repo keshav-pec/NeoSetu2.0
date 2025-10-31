@@ -126,24 +126,13 @@
 }
 
 .meetUserVideo {
-  position: absolute;
-  bottom: 100px;
-  left: 20px;
-  width: 200px;
-  height: 150px;
   z-index: 150;
-  object-fit: cover;
   border-radius: 16px;
   border: 2px solid rgba(255, 255, 255, 0.2);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.8);
-  transition: all 0.3s ease;
-  cursor: move;
-  resize: both;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
   overflow: hidden;
-  min-width: 120px;
-  min-height: 90px;
-  max-width: 400px;
-  max-height: 300px;
+  background: #000;
 }
 
 .meetUserVideo:hover {
@@ -151,14 +140,8 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9);
 }
 
-.meetUserVideo:hover::after {
-  content: '⤡';
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.7);
-  pointer-events: none;
+.resizeHandle {
+  z-index: 151;
 }
 
 .buttonContainers {
@@ -566,17 +549,6 @@
     right: 140px;
   }
 
-  .meetUserVideo {
-    width: 140px;
-    height: 105px;
-    bottom: 85px;
-    left: 15px;
-    min-width: 100px;
-    min-height: 75px;
-    max-width: 250px;
-    max-height: 200px;
-  }
-
   .lobbyCard {
     padding: 2rem;
     margin: 1rem;
@@ -659,13 +631,6 @@
     display: none;
   }
 
-  .meetUserVideo {
-    width: 80px;
-    height: 110px;
-    top: 20px;
-    right: 15px;
-  }
-
   .lobbyCard {
     padding: 1.5rem;
   }
@@ -676,5 +641,12 @@
 
   .conferenceView video {
     height: 150px;
+  }
+  
+  .conferenceView > div:not(:first-child) {
+    min-width: 60px;
+    min-height: 80px;
+    max-width: 180px;
+    max-height: 240px;
   }
 }
