@@ -5,12 +5,18 @@ let messages = {};
 let timeOnline = {};
 
 exports.connectToSocket = (server) => {
-  const io = new Server(server, {cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-    allowedHeaders: ["*"],
-    credentials: true 
-  }});
+  const io = new Server(server, {
+    cors: {
+      origin: [
+        'http://localhost:3000',
+        'https://neosetu.vercel.app',
+        'https://neosetu-b.vercel.app'
+      ],
+      methods: ["GET", "POST"],
+      allowedHeaders: ["*"],
+      credentials: true 
+    }
+  });
 
   io.on("connection", (socket) => {
     socket.on("join-call", (path) => {

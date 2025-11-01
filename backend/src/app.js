@@ -13,7 +13,18 @@ const io = connectToSocket(server);
 const mongoose = require("mongoose");
 const cors = require("cors");
 
-app.use(cors());
+// CORS configuration for production and development
+const corsOptions = {
+  origin: [
+    'http://localhost:3000',
+    'https://neosetu.vercel.app',
+    'https://neosetu-b.vercel.app'
+  ],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "40kb" }));
 app.use(express.urlencoded({ limit: "40kb", extended: true }));
 
