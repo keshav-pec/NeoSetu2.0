@@ -11,7 +11,8 @@ const corsOptions = {
   origin: [
     'http://localhost:3000',
     'https://neosetu.vercel.app',
-    'https://neosetu-b.vercel.app'
+    'https://neosetu-b.vercel.app',
+    'https://neosetu-qcv5.onrender.com'
   ],
   credentials: true,
   optionsSuccessStatus: 200

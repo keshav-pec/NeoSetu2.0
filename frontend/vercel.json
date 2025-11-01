@@ -11,20 +11,7 @@
   ],
   "routes": [
     {
-      "src": "/static/(.*)",
-      "dest": "/static/$1"
-    },
-    {
-      "src": "/favicon.ico",
-      "dest": "/favicon.ico"
-    },
-    {
-      "src": "/manifest.json",
-      "dest": "/manifest.json"
-    },
-    {
-      "src": "/robots.txt",
-      "dest": "/robots.txt"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
@@ -32,6 +19,6 @@
     }
   ],
   "env": {
-    "REACT_APP_BACKEND_URL": "https://neosetu-b.vercel.app/"
+    "REACT_APP_BACKEND_URL": "https://neosetu-qcv5.onrender.com/"
   }
 }

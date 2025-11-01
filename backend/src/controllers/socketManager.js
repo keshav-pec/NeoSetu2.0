@@ -10,7 +10,8 @@ exports.connectToSocket = (server) => {
       origin: [
         'http://localhost:3000',
         'https://neosetu.vercel.app',
-        'https://neosetu-b.vercel.app'
+        'https://neosetu-b.vercel.app',
+        'https://neosetu-qcv5.onrender.com'
       ],
       methods: ["GET", "POST"],
       allowedHeaders: ["*"],
