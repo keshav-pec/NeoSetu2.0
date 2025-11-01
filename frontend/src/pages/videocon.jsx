@@ -307,21 +307,33 @@ export default function Videocon() {
   };
 
   let connectToSocketServer = () => {
-    socketRef.current = io.connect(server_url, { secure: false });
+    socketRef.current = io.connect(server_url, { 
+      secure: true,
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
+    });
 
     socketRef.current.on("signal", gotMessageFromServer);
 
     socketRef.current.on("connect", () => {
-      socketRef.current.emit("join-call", window.location.href);
+      // Extract room code from URL path and normalize it
+      const roomCode = window.location.pathname.replace(/\//g, '') || 'default-room';
+      console.log("✅ Socket connected! ID:", socketRef.current.id);
+      console.log("🔗 Joining room:", roomCode);
+      socketRef.current.emit("join-call", roomCode);
       socketIdRef.current = socketRef.current.id;
 
       socketRef.current.on("chat-message", addMessage);
 
       socketRef.current.on("user-left", (id) => {
+        console.log("❌ User left:", id);
         setVideos((videos) => videos.filter((video) => video.socketId !== id));
       });
 
       socketRef.current.on("user-joined", (id, clients) => {
+        console.log("👥 User joined event - ID:", id, "Clients:", clients);
         clients.forEach((socketListId) => {
           connections[socketListId] = new RTCPeerConnection(
             peerConfigConnections
@@ -411,6 +423,23 @@ export default function Videocon() {
           }
         }
       });
+    });
+
+    // Add error handling
+    socketRef.current.on("connect_error", (error) => {
+      console.error("❌ Socket connection error:", error);
+    });
+
+    socketRef.current.on("disconnect", (reason) => {
+      console.log("⚠️ Socket disconnected:", reason);
+    });
+
+    socketRef.current.on("reconnect", (attemptNumber) => {
+      console.log("🔄 Socket reconnected after", attemptNumber, "attempts");
+    });
+
+    socketRef.current.on("reconnect_error", (error) => {
+      console.error("❌ Socket reconnection error:", error);
     });
   };
 
