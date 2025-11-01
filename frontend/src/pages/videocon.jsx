@@ -11,8 +11,9 @@ import ScreenShareIcon from "@mui/icons-material/ScreenShare";
 import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import ChatIcon from "@mui/icons-material/Chat";
 
-const backend = process.env.REACT_APP_BACKEND_URL;
+const backend = process.env.REACT_APP_BACKEND_URL?.replace(/\/$/, '') || 'https://neosetu-qcv5.onrender.com';
 const server_url = backend;
+console.log("🔧 Backend URL:", server_url);
 
 var connections = {};
 
@@ -25,6 +26,7 @@ export default function Videocon() {
   let socketIdRef = useRef();
 
   let localVideoref = useRef();
+  let lobbyVideoRef = useRef();
 
   let [videoAvailable, setVideoAvailable] = useState(true);
 
@@ -53,6 +55,10 @@ export default function Videocon() {
   const videoRef = useRef([]);
 
   let [videos, setVideos] = useState([]);
+  
+  let [isConnecting, setIsConnecting] = useState(false);
+  let [isConnected, setIsConnected] = useState(false);
+  let [connectionError, setConnectionError] = useState(null);
 
   // Drag and resize states
   const [localVideoPos, setLocalVideoPos] = useState({ x: 20, y: 100 });
@@ -66,6 +72,16 @@ export default function Videocon() {
     getPermissions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Debug useEffect to track state changes
+  useEffect(() => {
+    console.log("📊 State Update:", {
+      askForUsername,
+      isConnecting,
+      isConnected,
+      socketConnected: socketRef.current?.connected
+    });
+  }, [askForUsername, isConnecting, isConnected]);
 
   let getDislayMedia = () => {
     if (screen) {
@@ -81,48 +97,75 @@ export default function Videocon() {
 
   const getPermissions = async () => {
     try {
-      const videoPermission = await navigator.mediaDevices.getUserMedia({
-        video: true,
-      });
-      if (videoPermission) {
-        setVideoAvailable(true);
-        console.log("Video permission granted");
-      } else {
+      let hasVideo = false;
+      let hasAudio = false;
+
+      // Check video permission
+      try {
+        const videoPermission = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
+        if (videoPermission) {
+          hasVideo = true;
+          setVideoAvailable(true);
+          console.log("✅ Video permission granted");
+          // Stop the test stream
+          videoPermission.getTracks().forEach(track => track.stop());
+        }
+      } catch (e) {
+        console.log("❌ Video permission denied:", e);
         setVideoAvailable(false);
-        console.log("Video permission denied");
       }
 
-      const audioPermission = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-      });
-      if (audioPermission) {
-        setAudioAvailable(true);
-        console.log("Audio permission granted");
-      } else {
+      // Check audio permission
+      try {
+        const audioPermission = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        if (audioPermission) {
+          hasAudio = true;
+          setAudioAvailable(true);
+          console.log("✅ Audio permission granted");
+          // Stop the test stream
+          audioPermission.getTracks().forEach(track => track.stop());
+        }
+      } catch (e) {
+        console.log("❌ Audio permission denied:", e);
         setAudioAvailable(false);
-        console.log("Audio permission denied");
       }
 
+      // Check screen share availability
       if (navigator.mediaDevices.getDisplayMedia) {
         setScreenAvailable(true);
       } else {
         setScreenAvailable(false);
       }
 
-      if (videoAvailable || audioAvailable) {
+      // Now get the actual media stream to use
+      if (hasVideo || hasAudio) {
         const userMediaStream = await navigator.mediaDevices.getUserMedia({
-          video: videoAvailable,
-          audio: audioAvailable,
+          video: hasVideo,
+          audio: hasAudio,
         });
         if (userMediaStream) {
           window.localStream = userMediaStream;
+          console.log("✅ Local video stream created and stored in window.localStream");
+          
+          // Try to attach to whichever video element is currently rendered
+          if (lobbyVideoRef.current) {
+            lobbyVideoRef.current.srcObject = userMediaStream;
+            lobbyVideoRef.current.play().catch(e => console.log("Auto-play prevented:", e));
+            console.log("✅ Stream attached to lobby preview");
+          }
           if (localVideoref.current) {
             localVideoref.current.srcObject = userMediaStream;
+            localVideoref.current.play().catch(e => console.log("Auto-play prevented:", e));
+            console.log("✅ Stream attached to meeting self-video");
           }
         }
       }
     } catch (error) {
-      console.log(error);
+      console.error("❌ Error getting permissions:", error);
     }
   };
 
@@ -307,23 +350,88 @@ export default function Videocon() {
   };
 
   let connectToSocketServer = () => {
-    socketRef.current = io.connect(server_url, { 
-      secure: true,
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5
+    console.log("🚀 Attempting to connect to:", server_url);
+    setIsConnecting(true);
+    setConnectionError(null);
+    
+    // Set a timeout for connection
+    const connectionTimeout = setTimeout(() => {
+      if (!socketRef.current?.connected) {
+        console.error("❌ Connection timeout after 20 seconds");
+        setIsConnecting(false);
+        setConnectionError("Connection timeout. Please check your internet connection and try again.");
+      }
+    }, 20000); // 20 second timeout for mobile
+    
+    try {
+      socketRef.current = io.connect(server_url, { 
+        secure: true,
+        transports: ['polling', 'websocket'], // Try polling first for mobile
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+        timeout: 15000,
+        forceNew: true
+      });
+      
+      console.log("📡 Socket.IO client created");
+    } catch (error) {
+      console.error("❌ Error creating socket:", error);
+      clearTimeout(connectionTimeout);
+      setIsConnecting(false);
+      setConnectionError("Failed to initialize connection. Please refresh and try again.");
+      return;
+    }
+
+    // Register error handlers FIRST, before connection completes
+    socketRef.current.on("connect_error", (error) => {
+      console.error("❌ Socket connection error:", error);
+      clearTimeout(connectionTimeout);
+      setIsConnecting(false);
+      setIsConnected(false);
+      setConnectionError("Failed to connect to server. Please check your internet connection.");
+    });
+
+    socketRef.current.on("disconnect", (reason) => {
+      console.log("⚠️ Socket disconnected:", reason);
+      setIsConnected(false);
+      if (reason === 'io server disconnect') {
+        socketRef.current.connect();
+      }
+    });
+
+    socketRef.current.on("reconnect", (attemptNumber) => {
+      console.log("🔄 Socket reconnected after", attemptNumber, "attempts");
+      setIsConnected(true);
+      setConnectionError(null);
+    });
+
+    socketRef.current.on("reconnect_error", (error) => {
+      console.error("❌ Socket reconnection error:", error);
+      setConnectionError("Reconnection failed. Please refresh the page.");
+    });
+
+    socketRef.current.on("reconnect_failed", () => {
+      console.error("❌ Socket reconnection failed completely");
+      setIsConnecting(false);
+      setConnectionError("Could not reconnect to server. Please refresh the page.");
     });
 
     socketRef.current.on("signal", gotMessageFromServer);
 
     socketRef.current.on("connect", () => {
+      clearTimeout(connectionTimeout);
       // Extract room code from URL path and normalize it
       const roomCode = window.location.pathname.replace(/\//g, '') || 'default-room';
       console.log("✅ Socket connected! ID:", socketRef.current.id);
       console.log("🔗 Joining room:", roomCode);
       socketRef.current.emit("join-call", roomCode);
       socketIdRef.current = socketRef.current.id;
+      
+      // Update state - React should batch these updates
+      setIsConnecting(false);
+      setIsConnected(true);
+      console.log("✅ Connection established - UI should now show meeting room");
 
       socketRef.current.on("chat-message", addMessage);
 
@@ -424,23 +532,6 @@ export default function Videocon() {
         }
       });
     });
-
-    // Add error handling
-    socketRef.current.on("connect_error", (error) => {
-      console.error("❌ Socket connection error:", error);
-    });
-
-    socketRef.current.on("disconnect", (reason) => {
-      console.log("⚠️ Socket disconnected:", reason);
-    });
-
-    socketRef.current.on("reconnect", (attemptNumber) => {
-      console.log("🔄 Socket reconnected after", attemptNumber, "attempts");
-    });
-
-    socketRef.current.on("reconnect_error", (error) => {
-      console.error("❌ Socket reconnection error:", error);
-    });
   };
 
   let silence = () => {
@@ -491,9 +582,30 @@ export default function Videocon() {
     if (localVideoref.current && window.localStream) {
       // Re-apply the stream to the video element.
       localVideoref.current.srcObject = window.localStream;
+      // Ensure video plays (especially important on mobile)
+      localVideoref.current.play().catch(e => {
+        console.log("⚠️ Auto-play prevented:", e);
+      });
+      console.log("✅ Local video stream applied to self-video window");
+    } else {
+      console.log("⚠️ Local video not ready:", {
+        hasVideoRef: !!localVideoref.current,
+        hasStream: !!window.localStream
+      });
     }
     // It depends on `askForUsername` because changing this state causes the view to switch.
   }, [askForUsername]);
+
+  // Additional effect to ensure local video shows when connected
+  useEffect(() => {
+    if (isConnected && localVideoref.current && window.localStream) {
+      console.log("🎥 Connection established - attaching local stream to self-video");
+      localVideoref.current.srcObject = window.localStream;
+      localVideoref.current.play().catch(e => {
+        console.log("⚠️ Auto-play prevented on connection:", e);
+      });
+    }
+  }, [isConnected]);
 
   let handleScreen = () => {
     setScreen(!screen);
@@ -509,6 +621,20 @@ export default function Videocon() {
       setDragStart({
         x: e.clientX - localVideoPos.x,
         y: e.clientY - localVideoPos.y
+      });
+    }
+  };
+
+  const handleTouchStart = (e) => {
+    const touch = e.touches[0];
+    if (e.target.classList.contains(styles.resizeHandle)) {
+      setIsResizing(true);
+      setDragStart({ x: touch.clientX, y: touch.clientY });
+    } else {
+      setIsDragging(true);
+      setDragStart({
+        x: touch.clientX - localVideoPos.x,
+        y: touch.clientY - localVideoPos.y
       });
     }
   };
@@ -538,7 +664,38 @@ export default function Videocon() {
     }
   };
 
+  const handleTouchMove = (e) => {
+    const touch = e.touches[0];
+    if (isDragging) {
+      const newX = touch.clientX - dragStart.x;
+      const newY = touch.clientY - dragStart.y;
+      
+      // Constrain to viewport
+      const maxX = window.innerWidth - localVideoSize.width;
+      const maxY = window.innerHeight - localVideoSize.height - 100;
+      
+      setLocalVideoPos({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY))
+      });
+    } else if (isResizing) {
+      const deltaX = touch.clientX - dragStart.x;
+      const deltaY = touch.clientY - dragStart.y;
+      
+      const newWidth = Math.max(120, Math.min(400, localVideoSize.width + deltaX));
+      const newHeight = Math.max(90, Math.min(300, localVideoSize.height + deltaY));
+      
+      setLocalVideoSize({ width: newWidth, height: newHeight });
+      setDragStart({ x: touch.clientX, y: touch.clientY });
+    }
+  };
+
   const handleMouseUp = () => {
+    setIsDragging(false);
+    setIsResizing(false);
+  };
+
+  const handleTouchEnd = () => {
     setIsDragging(false);
     setIsResizing(false);
   };
@@ -547,10 +704,14 @@ export default function Videocon() {
     if (isDragging || isResizing) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('touchmove', handleTouchMove);
+      window.addEventListener('touchend', handleTouchEnd);
       
       return () => {
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('touchmove', handleTouchMove);
+        window.removeEventListener('touchend', handleTouchEnd);
       };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -580,19 +741,41 @@ export default function Videocon() {
   };
 
   let connect = () => {
+    console.log("🚀 Connect button clicked - joining meeting");
     setAskForUsername(false);
+    setIsConnecting(true);
+    setIsConnected(false);
     getMedia();
   };
 
+  // Log render decision
+  const showLobby = askForUsername === true;
+  const showLoading = !askForUsername && (isConnecting || !isConnected);
+  const showMeeting = !askForUsername && !isConnecting && isConnected;
+  
+  console.log("🎬 Render decision:", { showLobby, showLoading, showMeeting });
+
   return (
     <div>
-      {askForUsername === true ? (
+      {showLobby ? (
         <div className={styles.lobbyContainer}>
           <div className={styles.lobbyCard}>
             <h2 className={styles.lobbyTitle}>Join Meeting</h2>
             
             <div className={styles.lobbyPreview}>
-              <video ref={localVideoref} autoPlay muted></video>
+              <video 
+                ref={(el) => {
+                  lobbyVideoRef.current = el;
+                  if (el && window.localStream && el.srcObject !== window.localStream) {
+                    console.log("🎥 Setting local stream on lobby preview");
+                    el.srcObject = window.localStream;
+                    el.play().catch(e => console.log("Lobby auto-play prevented:", e));
+                  }
+                }}
+                autoPlay 
+                playsInline
+                muted
+              ></video>
             </div>
 
             <input
@@ -613,6 +796,29 @@ export default function Videocon() {
             >
               Join Now
             </button>
+          </div>
+        </div>
+      ) : showLoading ? (
+        <div className={styles.loadingContainer}>
+          <div className={styles.loadingCard}>
+            <div className={styles.loadingSpinner}></div>
+            <h2 className={styles.loadingTitle}>
+              {isConnecting ? 'Connecting to meeting...' : 'Waiting for connection...'}
+            </h2>
+            <p className={styles.loadingSubtitle}>
+              {connectionError ? connectionError : 'Please wait while we connect you to other participants'}
+            </p>
+            {connectionError && (
+              <button 
+                className={styles.retryButton}
+                onClick={() => {
+                  setConnectionError(null);
+                  connectToSocketServer();
+                }}
+              >
+                Retry Connection
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -730,18 +936,28 @@ export default function Videocon() {
             ref={dragRef}
             className={styles.meetUserVideo}
             onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
             style={{
               left: `${localVideoPos.x}px`,
-              bottom: `${localVideoPos.y}px`,
+              top: `${localVideoPos.y}px`,
               width: `${localVideoSize.width}px`,
               height: `${localVideoSize.height}px`,
               cursor: isDragging ? 'grabbing' : 'grab',
-              position: 'absolute'
+              position: 'absolute',
+              touchAction: 'none'
             }}
           >
             <video
-              ref={localVideoref}
+              ref={(el) => {
+                localVideoref.current = el;
+                if (el && window.localStream && el.srcObject !== window.localStream) {
+                  console.log("🎥 Setting local stream on self-video element mount");
+                  el.srcObject = window.localStream;
+                  el.play().catch(e => console.log("Auto-play prevented:", e));
+                }
+              }}
               autoPlay
+              playsInline
               muted
               style={{
                 width: '100%',
@@ -779,20 +995,37 @@ export default function Videocon() {
             </div>
           </div>
 
-          <div className={styles.conferenceView}>
-            {videos.map((video) => (
-              <div key={video.socketId}>
-                <video
-                  data-socket={video.socketId}
-                  ref={(ref) => {
-                    if (ref && video.stream) {
-                      ref.srcObject = video.stream;
-                    }
-                  }}
-                  autoPlay
-                ></video>
+          <div className={`${styles.conferenceView} ${styles[`participants${Math.min(videos.length + 1, 6)}`]}`}>
+            {videos.length === 0 ? (
+              <div className={styles.waitingMessage}>
+                <div className={styles.waitingContent}>
+                  <VideocamIcon style={{ fontSize: '4rem', color: 'rgba(255,255,255,0.3)', marginBottom: '1rem' }} />
+                  <h3>Waiting for others to join...</h3>
+                  <p>Share the meeting link to invite participants</p>
+                </div>
               </div>
-            ))}
+            ) : (
+              videos.map((video, index) => (
+                <div 
+                  key={video.socketId} 
+                  className={styles.videoBlock}
+                  data-participant-index={index}
+                >
+                  <video
+                    data-socket={video.socketId}
+                    ref={(ref) => {
+                      if (ref && video.stream) {
+                        ref.srcObject = video.stream;
+                      }
+                    }}
+                    autoPlay
+                  ></video>
+                  <div className={styles.videoLabel}>
+                    Participant {index + 1}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

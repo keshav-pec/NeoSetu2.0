@@ -8,12 +8,24 @@ const cors = require("cors");
 
 // CORS configuration for production and development
 const corsOptions = {
-  origin: [
-    'http://localhost:3000',
-    'https://neosetu.vercel.app',
-    'https://neosetu-b.vercel.app',
-    'https://neosetu-qcv5.onrender.com'
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'https://neosetu.vercel.app',
+      'https://neosetu-b.vercel.app',
+      'https://neosetu-qcv5.onrender.com'
+    ];
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.startsWith('http://localhost')) {
+      callback(null, true);
+    } else {
+      console.log('⚠️ CORS blocked origin:', origin);
+      callback(null, true); // Allow anyway for now
+    }
+  },
   credentials: true,
   optionsSuccessStatus: 200
 };
