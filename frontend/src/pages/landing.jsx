@@ -112,25 +112,25 @@ export default function LandingPage() {
             <div className={styles.mockVideoCall}>
               <div className={styles.videoParticipant}>
                 <div className={styles.participantVideo}>
-                  <VideocamIcon className={styles.participantIcon} />
+                  <div className={styles.participantAvatar} style={{background: 'linear-gradient(135deg,#6dd3ff,#6b8cff)'}}>J</div>
                 </div>
                 <span className={styles.participantName}>John</span>
               </div>
               <div className={styles.videoParticipant} style={{ animationDelay: '0.2s' }}>
                 <div className={styles.participantVideo}>
-                  <VideocamIcon className={styles.participantIcon} />
+                  <div className={styles.participantAvatar} style={{background: 'linear-gradient(135deg,#ffb3c1,#ff8f6b)'}}>S</div>
                 </div>
                 <span className={styles.participantName}>Sarah</span>
               </div>
               <div className={styles.videoParticipant} style={{ animationDelay: '0.4s' }}>
                 <div className={styles.participantVideo}>
-                  <VideocamIcon className={styles.participantIcon} />
+                  <div className={styles.participantAvatar} style={{background: 'linear-gradient(135deg,#c7ffb3,#6bffb3)'}}>M</div>
                 </div>
                 <span className={styles.participantName}>Mike</span>
               </div>
               <div className={styles.videoParticipant} style={{ animationDelay: '0.6s' }}>
                 <div className={styles.participantVideo}>
-                  <VideocamIcon className={styles.participantIcon} />
+                  <div className={styles.participantAvatar} style={{background: 'linear-gradient(135deg,#ffd86b,#ff9f6b)'}}>E</div>
                 </div>
                 <span className={styles.participantName}>Emma</span>
               </div>
