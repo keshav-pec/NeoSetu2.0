@@ -20,16 +20,37 @@ exports.connectToSocket = (server) => {
   });
 
   io.on("connection", (socket) => {
+    console.log(`✅ New socket connection: ${socket.id}`);
+
     socket.on("join-call", (path) => {
+      console.log(`🔗 Socket ${socket.id} joining call: ${path}`);
+      
       if (connections[path] === undefined) {
         connections[path] = [];
       }
+
+      // Get existing clients before adding new one
+      const existingClients = [...connections[path]];
+      
+      // Add new client to room
       connections[path].push(socket.id);
       timeOnline[socket.id] = new Date();
-      connections[path].forEach((el) => {
-        io.to(el).emit("user-joined", socket.id, connections[path]);
+
+      // Send existing clients to the new joiner (so they can initiate offers)
+      if (existingClients.length > 0) {
+        console.log(`📤 Sending existing clients to new user ${socket.id}:`, existingClients);
+        io.to(socket.id).emit("user-joined", socket.id, existingClients);
+      }
+
+      // Notify all existing clients about the new user
+      existingClients.forEach((clientId) => {
+        console.log(`📢 Notifying ${clientId} about new user ${socket.id}`);
+        io.to(clientId).emit("user-joined", socket.id, [socket.id]);
       });
-      if (messages[path] !== undefined) {
+
+      // Send previous chat messages to new joiner only
+      if (messages[path] !== undefined && messages[path].length > 0) {
+        console.log(`💬 Sending ${messages[path].length} previous messages to ${socket.id}`);
         messages[path].forEach((el) => {
           io.to(socket.id).emit(
             "chat-message",
@@ -42,10 +63,13 @@ exports.connectToSocket = (server) => {
     });
 
     socket.on("signal", (toId, message) => {
+      console.log(`🔄 Relaying signal from ${socket.id} to ${toId}`);
       io.to(toId).emit("signal", socket.id, message);
     });
 
     socket.on("chat-message", (data, sender) => {
+      console.log(`💬 Chat message from ${socket.id} (${sender}): ${data.substring(0, 50)}...`);
+      
       const [matchingRoom, found] = Object.entries(connections).reduce(
         ([room, isFound], [roomKey, roomValue]) => {
           if (!isFound && roomValue.includes(socket.id)) {
@@ -62,21 +86,27 @@ exports.connectToSocket = (server) => {
           messages[matchingRoom] = [];
         }
 
+        // Store message for history
         messages[matchingRoom].push({
           sender: sender,
           data: data,
           "socket-id-sender": socket.id,
         });
 
+        // Broadcast to all clients in the room (including sender for confirmation)
+        console.log(`📤 Broadcasting message to ${connections[matchingRoom].length} clients in room`);
         connections[matchingRoom].forEach((elem) => {
           io.to(elem).emit("chat-message", data, sender, socket.id);
         });
+      } else {
+        console.log(`⚠️ Socket ${socket.id} not found in any room`);
       }
     });
 
     socket.on("disconnect", () => {
+      console.log(`❌ Socket disconnected: ${socket.id}`);
+      
       var diffTime = Math.abs(timeOnline[socket.id] - new Date());
-
       var key;
 
       for (const [k, v] of JSON.parse(
@@ -85,18 +115,25 @@ exports.connectToSocket = (server) => {
         for (let a = 0; a < v.length; ++a) {
           if (v[a] === socket.id) {
             key = k;
+            console.log(`🔍 Found ${socket.id} in room: ${key}`);
 
+            // Notify all other clients in the room
             for (let a = 0; a < connections[key].length; ++a) {
-              io.to(connections[key][a]).emit("user-left", socket.id);
+              if (connections[key][a] !== socket.id) {
+                console.log(`📢 Notifying ${connections[key][a]} that ${socket.id} left`);
+                io.to(connections[key][a]).emit("user-left", socket.id);
+              }
             }
 
+            // Remove from room
             var index = connections[key].indexOf(socket.id);
-
             connections[key].splice(index, 1);
 
+            // Clean up empty rooms
             if (connections[key].length === 0) {
+              console.log(`🧹 Cleaning up empty room: ${key}`);
               delete connections[key];
-              delete messages[key]; // Clean up messages for empty rooms
+              delete messages[key];
             }
           }
         }
